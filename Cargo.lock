@@ -907,18 +907,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rollux"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm",
- "ratatui",
- "rustls",
- "tui-prompts",
- "url",
-]
-
-[[package]]
 name = "rstest"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1170,6 +1158,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "taurus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "ratatui",
+ "rustls",
+ "tui-prompts",
+ "url",
 ]
 
 [[package]]
