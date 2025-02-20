@@ -20,7 +20,7 @@ use ratatui::{
 };
 
 struct App {
-    current_url: Url,
+    gemspaces: Vec<Url>,
     client: Client,
     content: Option<Content>,
     scroll: (u16, u16),
@@ -80,8 +80,8 @@ impl Content {
 impl Default for App {
     fn default() -> Self {
         Self {
-            current_url: Url::parse("gemini://gemini.circumlunar.space/capcom/")
-                .expect("We know that this is a valid url"),
+            gemspaces: vec![Url::parse("gemini://gemini.circumlunar.space/capcom/")
+                .expect("We know that this is a valid url")],
             client: Client::new(true),
             content: None,
             scroll: (0, 0),
@@ -97,7 +97,13 @@ impl Widget for &App {
     {
         let layout = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]);
         let [browser, command] = layout.areas(area);
-        let title = Line::from(self.current_url.as_str()).bold();
+        let title = Line::from(
+            self.gemspaces
+                .last()
+                .expect("We always have at least one gemspace")
+                .as_str(),
+        )
+        .bold();
         let main_block = Block::bordered().title_top(title);
         match &self.content {
             None => {
@@ -115,7 +121,13 @@ impl Widget for &App {
                 }
                 Body::String(body) => {
                     if content.mime.starts_with("text/gemini") {
-                        let parser = GemTextParser::new(&body, self.current_url.clone());
+                        let parser = GemTextParser::new(
+                            &body,
+                            self.gemspaces
+                                .last()
+                                .expect("We always have at least one gemspace")
+                                .clone(),
+                        );
                         let mut n_links = 0;
                         let mut lines = Vec::new();
                         for line in parser {
@@ -214,6 +226,7 @@ impl App {
                             KeyCode::Char('i') => {
                                 self.status = AppStatus::Typing(String::new());
                             }
+                            KeyCode::Backspace => {}
                             _ => {}
                         },
                         AppStatus::Typing(ref mut text) => match key_event.code {
@@ -231,8 +244,13 @@ impl App {
                                     let Body::String(body) = body else {
                                         continue;
                                     };
-                                    let parser =
-                                        GemTextParser::new(&body, self.current_url.clone());
+                                    let parser = GemTextParser::new(
+                                        &body,
+                                        self.gemspaces
+                                            .last()
+                                            .expect("We always have at least one gemspace")
+                                            .clone(),
+                                    );
                                     let Some(link) = parser
                                         .flatten()
                                         .filter_map(|line| match line {
@@ -253,18 +271,23 @@ impl App {
                                     else {
                                         continue;
                                     };
-                                    self.current_url = link;
+                                    self.gemspaces.push(link);
                                     self.status = AppStatus::Loading;
                                     self.content = None;
                                     continue;
                                 }
                                 if text.starts_with("gemini://") {
-                                    self.current_url = Url::parse(text)?;
+                                    self.gemspaces.push(Url::parse(text)?);
                                     self.status = AppStatus::Loading;
                                     self.content = None;
                                     continue;
                                 }
-                                self.current_url = self.current_url.join(&text)?;
+                                self.gemspaces.push(
+                                    self.gemspaces
+                                        .last()
+                                        .expect("We always have at least one gemspace")
+                                        .join(&text)?,
+                                );
                                 self.status = AppStatus::Loading;
                                 self.content = None;
                             }
@@ -283,7 +306,12 @@ impl App {
     }
 
     fn load_site(&mut self) -> Result<()> {
-        let response = self.client.request(self.current_url.clone())?;
+        let response = self.client.request(
+            self.gemspaces
+                .last()
+                .expect("We always have at least one gemspace")
+                .clone(),
+        )?;
         match response {
             GeminiResponse::Success { mime, body } => {
                 self.content = Some(Content::from_mime_and_bytes(mime, body)?);
