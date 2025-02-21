@@ -10,6 +10,7 @@ use rustls::{
     crypto::{
         aws_lc_rs::default_provider, verify_tls12_signature, verify_tls13_signature, CryptoProvider,
     },
+    pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer},
     ClientConfig,
 };
 use url::Url;
@@ -19,12 +20,29 @@ pub struct Client {
     auto_redirect: bool,
 }
 
+pub struct Certificates {
+    pub cert_file: String,
+    pub key_file: String,
+}
+
 impl Client {
-    pub fn new(auto_redirect: bool) -> Self {
+    pub fn new(auto_redirect: bool, certificates: Option<Certificates>) -> Self {
         let root_store = rustls::RootCertStore { roots: Vec::new() };
-        let mut config = rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        let config_builder = rustls::ClientConfig::builder().with_root_certificates(root_store);
+        let mut config = if let Some(ceritificates) = certificates {
+            let cert_chain = CertificateDer::pem_file_iter("cert.pem")
+                .expect("Error opening certificate")
+                .map(|result| result.unwrap())
+                .collect();
+            config_builder
+                .with_client_auth_cert(
+                    cert_chain,
+                    PrivateKeyDer::from_pem_file("key.pem").expect("Error loading private key"),
+                )
+                .expect("Error opening client auth")
+        } else {
+            config_builder.with_no_client_auth()
+        };
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(TofuCertVerifier::new(default_provider())));
@@ -48,15 +66,19 @@ impl Client {
             domain.to_string().try_into()?,
         )?;
         let mut socket = TcpStream::connect(format!("{domain}:{port}"))?;
+        tracing::debug!("Connected to {domain}:{port}");
         let mut tls = rustls::Stream::new(&mut conn, &mut socket);
+        tracing::debug!("Created TLS connection");
         tls.write_all(url.as_str().as_bytes())?;
         tls.write_all(b"\r\n")?;
         tls.flush()?;
+        tracing::debug!("Sent request");
         let mut read = BufReader::new(tls);
         let mut status = Vec::with_capacity(3);
         read.read_until(b' ', &mut status)?;
         let mut buffer = Vec::with_capacity(1024);
-        read.take(1024 * 1024 * 8).read_to_end(&mut buffer)?;
+        read.take(1024 * 1024 * 64).read_to_end(&mut buffer)?;
+        tracing::debug!("Read response");
         Ok(match status.as_slice() {
             b"10 " | b"11 " => {
                 let status = InputStatus::try_from(status.as_slice())?;
