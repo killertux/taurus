@@ -149,8 +149,7 @@ impl App {
     pub(crate) fn new(config: Option<Config>) -> Self {
         Self {
             gemspaces_nav: GemspaceNav::new(
-                Url::parse("gemini://gemini.circumlunar.space/capcom/")
-                    .expect("We know that this is a valid url"),
+                Url::parse("gemini://tlgs.one/").expect("We know that this is a valid url"),
             ),
             client: Client::new(
                 true,
