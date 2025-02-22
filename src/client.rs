@@ -72,7 +72,7 @@ impl Client {
         tls.write_all(url.as_str().as_bytes())?;
         tls.write_all(b"\r\n")?;
         tls.flush()?;
-        tracing::debug!("Sent request");
+        tracing::debug!("Sent request {url}");
         let mut read = BufReader::new(tls);
         let mut status = Vec::with_capacity(3);
         read.read_until(b' ', &mut status)?;
@@ -100,7 +100,13 @@ impl Client {
             }
             b"30 " | b"31 " => {
                 let status = RedirectStatus::try_from(status.as_slice())?;
-                let url = Url::parse(String::from_utf8(buffer)?.trim())?;
+                let string = String::from_utf8(buffer)?;
+                let url = if string.starts_with("gemini://") {
+                    Url::parse(string.trim())?
+                } else {
+                    url.join(string.trim())?
+                };
+
                 if self.auto_redirect {
                     return self.request(url);
                 }
